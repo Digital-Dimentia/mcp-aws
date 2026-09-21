@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "mcp_aws",
+  "project_id": "422b333a-97ed-4573-9ace-1834285983cb"
+}
