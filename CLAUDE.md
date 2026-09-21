@@ -86,7 +86,19 @@ uv run pytest        # fully offline; AWS is stubbed with botocore Stubber
 uv run mcp-aws       # speaks MCP over stdio
 ```
 
-Never add a test that needs credentials or network. Use the `stub_client` fixture.
+Never add a test that needs credentials or network. The fixtures in `tests/conftest.py`
+are what keep that true:
+
+| Fixture | Use it for |
+|---|---|
+| `stub_client` | An AWS call the test wants to answer, via botocore's `Stubber` |
+| `fake_profiles` | Three configured profiles, patched at botocore's own accessor so a `from`-import cannot slip past it |
+| `no_aws_calls` | Asserting a code path reaches AWS *not at all* — it records every attempt to create a client, so a swallowed failure still fails the test |
+| `tool_surface` | The serialized tool schemas, when a test must not drift from them |
+
+An autouse fixture also pins dummy credentials and clears the profile, session and result
+caches around every test; those are module globals that otherwise leak a real account id
+from one test into another's assertions.
 
 ## Architecture Overview
 
