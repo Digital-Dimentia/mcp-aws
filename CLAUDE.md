@@ -58,21 +58,56 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
 
+## Project: mcp-aws
+
+Read-only AWS MCP server over stdio, built to sit behind an MCP gateway.
+
+### The invariant
+
+**Coverage lives in the catalog, never in the tool surface.** There are exactly five
+tools and there will stay exactly five; a sixth is a design failure, not a feature. New
+AWS capability is a YAML entry in `src/mcp_aws/catalog/views/`.
+
+The reason is context cost: tool schemas are resent every turn, so a per-operation tool
+surface would consume the model's budget before it asks anything. `tests/test_surface.py`
+asserts both the tool count and the serialized schema size — if it fails, the design has
+regressed.
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+uv sync
+uv run pytest        # fully offline; AWS is stubbed with botocore Stubber
+uv run mcp-aws       # speaks MCP over stdio
 ```
+
+Never add a test that needs credentials or network. Use the `stub_client` fixture.
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+| Path | Role |
+|---|---|
+| `server.py` | MCPServer wiring, the five tool wrappers, stdio entrypoint |
+| `tools.py` | Tool bodies — thin; no boto3 here |
+| `catalog/models.py` | The YAML schema as pydantic models |
+| `catalog/loader.py` | Discovery + validation; where read-only is enforced |
+| `catalog/engine.py` | The only module that executes AWS calls for a query |
+| `catalog/views/*.yaml` | The catalog itself |
+| `aws/profiles.py` | Named profiles → accounts |
+| `budget.py` | Size caps and lossless pagination cursors |
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- **Nothing writes to stdout.** It is the JSON-RPC channel; one stray byte kills the
+  session with no useful error. All logging goes to stderr via `logging_setup`.
+- **Read-only is structural.** The loader rejects non-read operations, unknown
+  operations, bad parameter targets and denylisted sensitive reads *at startup*. Do not
+  add a runtime bypass, and do not add a generic "call any API" tool.
+- **A broken catalog fails the build, not the user.** `tests/test_catalog.py` validates
+  every shipped view against real botocore models. Run it after touching any YAML.
+- **Truncation must stay lossless.** Items carry their page of origin so a cursor can
+  resume mid-page. `engine._next_page_token` uses botocore internals deliberately —
+  `PageIterator.resume_token` is only populated on botocore's own MaxItems truncation,
+  and its MaxItems counts result-key entries, not projected items.
+- **Tool wrappers keep their signatures.** `_guarded` uses `functools.wraps` because the
+  input schema is derived from the signature; losing it publishes `(*args, **kwargs)`.

@@ -1,0 +1,54 @@
+# Account-level inventory: who am I, where can I operate, what is out there.
+
+- id: account.identity
+  summary: Caller identity for a profile (account id, principal ARN)
+  client: sts
+  operation: get_caller_identity
+  regional: false
+  project: "{account_id: Account, principal: Arn, user_id: UserId}"
+  returns: One object with account_id, principal and user_id.
+
+- id: account.regions
+  summary: Regions available to this account, with opt-in status
+  description: >
+    Uses ec2:DescribeRegions, which almost every read-only policy allows, rather than
+    account:ListRegions.
+  client: ec2
+  operation: describe_regions
+  params:
+    all_regions:
+      type: boolean
+      description: Include regions the account has not opted into.
+      maps_to: AllRegions
+  project: "Regions[].{region: RegionName, opt_in: OptInStatus, endpoint: Endpoint}"
+  returns: One object per region with region, opt_in and endpoint.
+
+- id: resources.by_tag
+  summary: Any tagged resource in a region, optionally filtered by tag or resource type
+  description: >
+    The Resource Groups Tagging API is the cheapest cross-service inventory sweep
+    available — one call covers most services, at the cost of returning ARNs and tags
+    only. Use it to find things, then read_resource for detail.
+  client: resourcegroupstaggingapi
+  operation: get_resources
+  paginate: true
+  params:
+    tag_key:
+      type: string
+      description: Only resources carrying this tag key.
+      maps_to: TagFilters[$self]
+      filter_style: key_values
+    tag_values:
+      type: "string[]"
+      description: Restrict tag_key to these values. Requires tag_key.
+      maps_to: TagFilters[$tag_key]
+      filter_style: key_values
+    resource_types:
+      type: "string[]"
+      description: "Service or service:type filters, e.g. ec2:instance, s3, rds:db."
+      maps_to: ResourceTypeFilters
+  project: |
+    ResourceTagMappingList[].{
+      arn: ResourceARN,
+      tags: Tags[].{key: Key, value: Value} }
+  returns: One object per resource with its ARN and tags.

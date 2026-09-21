@@ -1,0 +1,38 @@
+# AWS Organizations. Only readable from a management or delegated-admin account; from
+# any other profile the call fails with a clear AWSOrganizationsNotInUse message.
+
+- id: org.accounts
+  summary: Accounts in the organization this profile belongs to
+  client: organizations
+  operation: list_accounts
+  paginate: true
+  regional: false
+  project: |
+    Accounts[].{
+      id: Id, name: Name, email: Email, status: Status,
+      joined: JoinedTimestamp, method: JoinedMethod }
+  returns: One object per member account.
+
+- id: org.units
+  summary: Organizational units directly under a parent OU or root
+  client: organizations
+  operation: list_organizational_units_for_parent
+  paginate: true
+  regional: false
+  params:
+    parent_id:
+      type: string
+      required: true
+      description: Root id (r-xxxx) or OU id (ou-xxxx-xxxxxxxx).
+      maps_to: ParentId
+  project: "OrganizationalUnits[].{id: Id, name: Name, arn: Arn}"
+  returns: One object per child OU.
+
+- id: org.roots
+  summary: Organization roots, the starting point for walking the OU tree
+  client: organizations
+  operation: list_roots
+  paginate: true
+  regional: false
+  project: "Roots[].{id: Id, name: Name, arn: Arn}"
+  returns: One object per root.

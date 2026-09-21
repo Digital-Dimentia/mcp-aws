@@ -1,0 +1,230 @@
+# Core compute and network.
+
+- id: ec2.instances.list
+  summary: EC2 instances with state, type, IPs and Name tag
+  client: ec2
+  operation: describe_instances
+  paginate: true
+  params:
+    state:
+      type: string
+      description: Instance state.
+      enum: [pending, running, shutting-down, terminated, stopping, stopped]
+      maps_to: Filters[instance-state-name]
+    vpc_id:
+      type: string
+      description: Only instances in this VPC.
+      maps_to: Filters[vpc-id]
+    name:
+      type: string
+      description: Match the Name tag (supports * wildcards).
+      maps_to: Filters[tag:Name]
+    instance_ids:
+      type: "string[]"
+      description: Specific instance ids.
+      maps_to: InstanceIds
+  project: |
+    Reservations[].Instances[].{
+      id: InstanceId,
+      name: Tags[?Key=='Name']|[0].Value,
+      type: InstanceType,
+      state: State.Name,
+      az: Placement.AvailabilityZone,
+      vpc: VpcId,
+      subnet: SubnetId,
+      private_ip: PrivateIpAddress,
+      public_ip: PublicIpAddress,
+      launched: LaunchTime }
+  returns: One object per instance with id, name, type, state, az, vpc, subnet, IPs, launched.
+
+- id: ec2.instance.detail
+  summary: Full detail for specific EC2 instances, including security groups and volumes
+  client: ec2
+  operation: describe_instances
+  paginate: true
+  params:
+    instance_ids:
+      type: "string[]"
+      required: true
+      description: Instance ids to describe.
+      maps_to: InstanceIds
+  project: |
+    Reservations[].Instances[].{
+      id: InstanceId,
+      name: Tags[?Key=='Name']|[0].Value,
+      type: InstanceType,
+      state: State.Name,
+      az: Placement.AvailabilityZone,
+      vpc: VpcId,
+      subnet: SubnetId,
+      private_ip: PrivateIpAddress,
+      public_ip: PublicIpAddress,
+      image_id: ImageId,
+      key_name: KeyName,
+      iam_profile: IamInstanceProfile.Arn,
+      security_groups: SecurityGroups[].{id: GroupId, name: GroupName},
+      volumes: BlockDeviceMappings[].{device: DeviceName, volume_id: Ebs.VolumeId},
+      monitoring: Monitoring.State,
+      launched: LaunchTime,
+      tags: Tags[].{key: Key, value: Value} }
+  returns: One detailed object per instance.
+  detail_of: ec2:instance
+  detail_param: instance_ids
+
+- id: ec2.security_groups.list
+  summary: Security groups with their inbound and outbound rules
+  client: ec2
+  operation: describe_security_groups
+  paginate: true
+  params:
+    group_ids:
+      type: "string[]"
+      description: Specific security group ids.
+      maps_to: GroupIds
+    vpc_id:
+      type: string
+      description: Only groups in this VPC.
+      maps_to: Filters[vpc-id]
+    group_name:
+      type: string
+      description: Match the group name.
+      maps_to: Filters[group-name]
+  project: |
+    SecurityGroups[].{
+      id: GroupId,
+      name: GroupName,
+      vpc: VpcId,
+      description: Description,
+      ingress: IpPermissions[].{
+        protocol: IpProtocol, from_port: FromPort, to_port: ToPort,
+        cidrs: IpRanges[].CidrIp, groups: UserIdGroupPairs[].GroupId },
+      egress: IpPermissionsEgress[].{
+        protocol: IpProtocol, from_port: FromPort, to_port: ToPort,
+        cidrs: IpRanges[].CidrIp } }
+  returns: One object per security group, with ingress and egress rules.
+  detail_of: ec2:security-group
+  detail_param: group_ids
+
+- id: ec2.vpcs.list
+  summary: VPCs with CIDR blocks and default flag
+  client: ec2
+  operation: describe_vpcs
+  paginate: true
+  params:
+    vpc_ids:
+      type: "string[]"
+      description: Specific VPC ids.
+      maps_to: VpcIds
+  project: |
+    Vpcs[].{
+      id: VpcId,
+      name: Tags[?Key=='Name']|[0].Value,
+      cidr: CidrBlock,
+      extra_cidrs: CidrBlockAssociationSet[].CidrBlock,
+      state: State,
+      is_default: IsDefault }
+  returns: One object per VPC.
+  detail_of: ec2:vpc
+  detail_param: vpc_ids
+
+- id: ec2.subnets.list
+  summary: Subnets with AZ, CIDR and free address count
+  client: ec2
+  operation: describe_subnets
+  paginate: true
+  params:
+    vpc_id:
+      type: string
+      description: Only subnets in this VPC.
+      maps_to: Filters[vpc-id]
+    subnet_ids:
+      type: "string[]"
+      description: Specific subnet ids.
+      maps_to: SubnetIds
+  project: |
+    Subnets[].{
+      id: SubnetId,
+      name: Tags[?Key=='Name']|[0].Value,
+      vpc: VpcId,
+      az: AvailabilityZone,
+      cidr: CidrBlock,
+      free_ips: AvailableIpAddressCount,
+      public_on_launch: MapPublicIpOnLaunch }
+  returns: One object per subnet.
+  detail_of: ec2:subnet
+  detail_param: subnet_ids
+
+- id: ec2.route_tables.list
+  summary: Route tables with their routes and subnet associations
+  client: ec2
+  operation: describe_route_tables
+  paginate: true
+  params:
+    vpc_id:
+      type: string
+      description: Only route tables in this VPC.
+      maps_to: Filters[vpc-id]
+  project: |
+    RouteTables[].{
+      id: RouteTableId,
+      vpc: VpcId,
+      name: Tags[?Key=='Name']|[0].Value,
+      routes: Routes[].{
+        destination: DestinationCidrBlock, gateway: GatewayId,
+        nat: NatGatewayId, target: NetworkInterfaceId, state: State },
+      associations: Associations[].{subnet: SubnetId, main: Main} }
+  returns: One object per route table.
+
+- id: ec2.volumes.list
+  summary: EBS volumes with size, type, state and attachment
+  client: ec2
+  operation: describe_volumes
+  paginate: true
+  params:
+    instance_id:
+      type: string
+      description: Only volumes attached to this instance.
+      maps_to: Filters[attachment.instance-id]
+    state:
+      type: string
+      description: Volume state.
+      enum: [creating, available, in-use, deleting, deleted, error]
+      maps_to: Filters[status]
+    volume_ids:
+      type: "string[]"
+      description: Specific volume ids.
+      maps_to: VolumeIds
+  project: |
+    Volumes[].{
+      id: VolumeId,
+      size_gb: Size,
+      type: VolumeType,
+      iops: Iops,
+      state: State,
+      encrypted: Encrypted,
+      az: AvailabilityZone,
+      attached_to: Attachments[0].InstanceId,
+      device: Attachments[0].Device }
+  returns: One object per EBS volume.
+  detail_of: ec2:volume
+  detail_param: volume_ids
+
+- id: ec2.nat_gateways.list
+  summary: NAT gateways with subnet, state and addresses
+  client: ec2
+  operation: describe_nat_gateways
+  paginate: true
+  params:
+    vpc_id:
+      type: string
+      description: Only NAT gateways in this VPC.
+      maps_to: Filter[vpc-id]
+  project: |
+    NatGateways[].{
+      id: NatGatewayId,
+      vpc: VpcId,
+      subnet: SubnetId,
+      state: State,
+      public_ip: NatGatewayAddresses[0].PublicIp,
+      private_ip: NatGatewayAddresses[0].PrivateIp }
+  returns: One object per NAT gateway.

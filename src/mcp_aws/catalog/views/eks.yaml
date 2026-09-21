@@ -1,0 +1,155 @@
+# EKS. The list APIs return bare names, so every list view here expands into the
+# matching describe call to return something worth reading.
+
+- id: eks.clusters.list
+  summary: EKS clusters with version, status, endpoint and VPC
+  client: eks
+  operation: list_clusters
+  paginate: true
+  project: clusters
+  expand:
+    operation: describe_cluster
+    arg: name
+    max_items: 50
+    project: |
+      cluster.{
+        name: name,
+        version: version,
+        status: status,
+        endpoint: endpoint,
+        platform_version: platformVersion,
+        vpc: resourcesVpcConfig.vpcId,
+        subnets: resourcesVpcConfig.subnetIds,
+        endpoint_public: resourcesVpcConfig.endpointPublicAccess,
+        endpoint_private: resourcesVpcConfig.endpointPrivateAccess,
+        public_cidrs: resourcesVpcConfig.publicAccessCidrs,
+        logging: logging.clusterLogging[?enabled].types[],
+        created: createdAt }
+  returns: One object per cluster, already expanded with describe_cluster detail.
+
+- id: eks.cluster.detail
+  summary: Full detail for one EKS cluster
+  client: eks
+  operation: describe_cluster
+  params:
+    name:
+      type: string
+      required: true
+      description: Cluster name.
+      maps_to: name
+  project: |
+    cluster.{
+      name: name,
+      arn: arn,
+      version: version,
+      status: status,
+      endpoint: endpoint,
+      platform_version: platformVersion,
+      role_arn: roleArn,
+      vpc: resourcesVpcConfig.vpcId,
+      subnets: resourcesVpcConfig.subnetIds,
+      security_groups: resourcesVpcConfig.securityGroupIds,
+      cluster_security_group: resourcesVpcConfig.clusterSecurityGroupId,
+      endpoint_public: resourcesVpcConfig.endpointPublicAccess,
+      endpoint_private: resourcesVpcConfig.endpointPrivateAccess,
+      public_cidrs: resourcesVpcConfig.publicAccessCidrs,
+      service_ipv4: kubernetesNetworkConfig.serviceIpv4Cidr,
+      ip_family: kubernetesNetworkConfig.ipFamily,
+      logging: logging.clusterLogging[?enabled].types[],
+      encryption: encryptionConfig[].provider.keyArn,
+      authentication_mode: accessConfig.authenticationMode,
+      health: health.issues[].{code: code, message: message},
+      tags: tags,
+      created: createdAt }
+  returns: One detailed cluster object.
+  detail_of: eks:cluster
+  detail_param: name
+
+- id: eks.nodegroups.list
+  summary: Managed node groups of one cluster, with scaling, instance types and health
+  client: eks
+  operation: list_nodegroups
+  paginate: true
+  params:
+    cluster:
+      type: string
+      required: true
+      description: Cluster name.
+      maps_to: clusterName
+  project: nodegroups
+  expand:
+    operation: describe_nodegroup
+    arg: nodegroupName
+    inherit: [clusterName]
+    max_items: 50
+    project: |
+      nodegroup.{
+        name: nodegroupName,
+        status: status,
+        capacity_type: capacityType,
+        ami_type: amiType,
+        instance_types: instanceTypes,
+        desired: scalingConfig.desiredSize,
+        min: scalingConfig.minSize,
+        max: scalingConfig.maxSize,
+        version: version,
+        release_version: releaseVersion,
+        subnets: subnets,
+        node_role: nodeRole,
+        health: health.issues[].{code: code, message: message},
+        created: createdAt }
+  returns: One object per node group, expanded with describe_nodegroup detail.
+
+- id: eks.addons.list
+  summary: Installed EKS add-ons for one cluster, with version and health
+  client: eks
+  operation: list_addons
+  paginate: true
+  params:
+    cluster:
+      type: string
+      required: true
+      description: Cluster name.
+      maps_to: clusterName
+  project: addons
+  expand:
+    operation: describe_addon
+    arg: addonName
+    inherit: [clusterName]
+    max_items: 50
+    project: |
+      addon.{
+        name: addonName,
+        version: addonVersion,
+        status: status,
+        service_account_role: serviceAccountRoleArn,
+        health: health.issues[].{code: code, message: message},
+        created: createdAt }
+  returns: One object per add-on.
+
+- id: eks.fargate_profiles.list
+  summary: Fargate profiles of one cluster, with selectors and subnets
+  client: eks
+  operation: list_fargate_profiles
+  paginate: true
+  params:
+    cluster:
+      type: string
+      required: true
+      description: Cluster name.
+      maps_to: clusterName
+  project: fargateProfileNames
+  expand:
+    operation: describe_fargate_profile
+    arg: fargateProfileName
+    inherit: [clusterName]
+    max_items: 50
+    project: |
+      fargateProfile.{
+        name: fargateProfileName,
+        status: status,
+        pod_execution_role: podExecutionRoleArn,
+        subnets: subnets,
+        selectors: selectors[].{namespace: namespace, labels: labels},
+        created: createdAt }
+  returns: One object per Fargate profile.

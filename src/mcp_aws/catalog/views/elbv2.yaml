@@ -1,0 +1,104 @@
+# Application / Network load balancers.
+
+- id: elbv2.load_balancers.list
+  summary: ALBs and NLBs with type, scheme, DNS name and state
+  client: elbv2
+  operation: describe_load_balancers
+  paginate: true
+  params:
+    names:
+      type: "string[]"
+      description: Specific load balancer names.
+      maps_to: Names
+    arns:
+      type: "string[]"
+      description: Specific load balancer ARNs.
+      maps_to: LoadBalancerArns
+  project: |
+    LoadBalancers[].{
+      name: LoadBalancerName,
+      arn: LoadBalancerArn,
+      type: Type,
+      scheme: Scheme,
+      dns_name: DNSName,
+      state: State.Code,
+      vpc: VpcId,
+      azs: AvailabilityZones[].ZoneName,
+      security_groups: SecurityGroups,
+      created: CreatedTime }
+  returns: One object per load balancer.
+  detail_of: elasticloadbalancing:loadbalancer
+  detail_param: arns
+  detail_from: arn
+
+- id: elbv2.target_groups.list
+  summary: Target groups with protocol, port and health check settings
+  client: elbv2
+  operation: describe_target_groups
+  paginate: true
+  params:
+    load_balancer_arn:
+      type: string
+      description: Only target groups attached to this load balancer.
+      maps_to: LoadBalancerArn
+    names:
+      type: "string[]"
+      description: Specific target group names.
+      maps_to: Names
+  project: |
+    TargetGroups[].{
+      name: TargetGroupName,
+      arn: TargetGroupArn,
+      protocol: Protocol,
+      port: Port,
+      target_type: TargetType,
+      vpc: VpcId,
+      health_check: {
+        protocol: HealthCheckProtocol, path: HealthCheckPath,
+        interval: HealthCheckIntervalSeconds, healthy: HealthyThresholdCount },
+      load_balancers: LoadBalancerArns }
+  returns: One object per target group.
+  detail_of: elasticloadbalancing:targetgroup
+  detail_param: names
+
+- id: elbv2.listeners.list
+  summary: Listeners on one load balancer, with ports, protocols and default actions
+  client: elbv2
+  operation: describe_listeners
+  paginate: true
+  params:
+    load_balancer_arn:
+      type: string
+      required: true
+      description: ARN of the load balancer.
+      maps_to: LoadBalancerArn
+  project: |
+    Listeners[].{
+      arn: ListenerArn,
+      port: Port,
+      protocol: Protocol,
+      ssl_policy: SslPolicy,
+      certificates: Certificates[].CertificateArn,
+      default_action: DefaultActions[0].Type,
+      target_group: DefaultActions[0].TargetGroupArn }
+  returns: One object per listener.
+
+- id: elbv2.target_health.list
+  summary: Health of the targets registered in one target group
+  client: elbv2
+  operation: describe_target_health
+  params:
+    target_group_arn:
+      type: string
+      required: true
+      description: ARN of the target group.
+      maps_to: TargetGroupArn
+  project: |
+    TargetHealthDescriptions[].{
+      target: Target.Id,
+      port: Target.Port,
+      az: Target.AvailabilityZone,
+      state: TargetHealth.State,
+      reason: TargetHealth.Reason,
+      description: TargetHealth.Description }
+  returns: One object per registered target.

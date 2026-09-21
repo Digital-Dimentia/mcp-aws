@@ -1,0 +1,26 @@
+- id: autoscaling.groups.list
+  summary: Auto Scaling groups with capacity, instances and attached target groups
+  client: autoscaling
+  operation: describe_auto_scaling_groups
+  paginate: true
+  params:
+    names:
+      type: "string[]"
+      description: Specific Auto Scaling group names.
+      maps_to: AutoScalingGroupNames
+  project: |
+    AutoScalingGroups[].{
+      name: AutoScalingGroupName,
+      min: MinSize,
+      max: MaxSize,
+      desired: DesiredCapacity,
+      instance_count: length(Instances),
+      health_check: HealthCheckType,
+      azs: AvailabilityZones,
+      subnets: VPCZoneIdentifier,
+      target_groups: TargetGroupARNs,
+      launch_template: LaunchTemplate.LaunchTemplateName,
+      created: CreatedTime }
+  returns: One object per Auto Scaling group.
+  detail_of: autoscaling:autoScalingGroup
+  detail_param: names
