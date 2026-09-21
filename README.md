@@ -123,14 +123,52 @@ produces a cursor that resumes at exactly the first dropped item.
 
 ## Resources
 
-Tools are the path a model uses; resources exist for humans and clients that browse or
-`@`-mention them.
+Tools are the path a model uses; resources are for humans and for clients that browse,
+`@`-mention, or build a picker out of them.
 
-| URI | Contents |
-|---|---|
-| `aws://catalog` | Every view with its parameters |
-| `aws://accounts` | Resolved profiles |
-| `aws://{profile}/{region}/{view_id}` | A view result (`default` as region = the profile's own) |
+Each **listing** is a JSON Schema enum fragment naming the template one of its values
+buys, which is what an MCP gateway needs to turn a set into clickable values. Listings are
+read whenever a client opens the server, so they never call AWS.
+
+| Listing | Values | Buys |
+|---|---|---|
+| `aws://accounts` | configured profiles | `aws://accounts/{profile}` |
+| `aws://catalog` | every view id, labelled with its summary | `aws://catalog/{view_id}` |
+| `aws://services` | services the catalog covers | narrows to `aws://services/{service}/views` |
+| `aws://services/{service}/views` | one service's view ids | `aws://catalog/{view_id}` |
+| `aws://regions` | regions, from bundled endpoint data | `aws://regions/{region}` |
+
+| Member | Contents | Cost |
+|---|---|---|
+| `aws://accounts/{profile}` | one profile resolved to account, alias, status | live STS/IAM |
+| `aws://catalog/{view_id}` | one view's parameters and output shape | free |
+| `aws://regions/{region}` | partition, geography, profiles defaulting there | free |
+| `aws://query/{profile}/{region}/{view_id}` | a view result (`default` as region = the profile's own) | **live AWS read** |
+
+`aws://query/...` pairs with no listing on purpose: a listing beside it would be read on
+open, and reading it would mean running queries nobody asked for.
+
+> **Breaking change in this release:** the result template was `aws://{profile}/{region}/{view_id}`.
+> Its fixed prefix was `aws://`, which shadowed every other URI. It is now
+> `aws://query/{profile}/{region}/{view_id}`, and `aws://catalog` returns a vocabulary
+> rather than a full dump — the dump is `aws_catalog` and `aws://catalog/{view_id}`.
+
+## Behind a gateway
+
+Everything in this section is ordinary MCP; a client that ignores it loses nothing.
+
+- **Injectable values.** The listing/template pairs above publish the four argument names
+  worth picking rather than typing — `profile`, `region`, `view_id` and `service`. A
+  gateway's admin UI renders each as chips that fill the matching field.
+- **Completions.** `completion/complete` answers for those same four, filtered by what has
+  been typed and narrowed by the sibling fields already filled: a `view_id` asked for
+  beside a chosen `service` offers only that service's views.
+- **Prompts.** `aws_account_overview(profile, region)` and
+  `aws_investigate_resource(arn, profile)`. Their argument names are the vocabulary's
+  variables, which is what lets the same chips fill them.
+
+None of this touches the tool surface: resources, templates, completions and prompts are
+fetched on demand instead of being resent every turn.
 
 ## Configuration
 

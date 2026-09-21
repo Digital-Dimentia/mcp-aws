@@ -14,8 +14,10 @@ from mcp.types import ToolAnnotations
 from . import __version__, logging_setup
 from .catalog.engine import run_view
 from .catalog.loader import Catalog, CatalogError, load_catalog
+from .completions import register_completions
 from .config import SETTINGS
 from .errors import McpAwsError
+from .prompts import register_prompts
 from .resources import register_resources
 from . import tools
 
@@ -143,7 +145,12 @@ def build_server(catalog: Catalog | None = None) -> MCPServer:
     ):
         server.add_tool(_guarded(fn), name=f"{prefix}{name}", annotations=READ_ONLY)
 
+    # None of the three touches the tool surface: resources, prompts and completions are
+    # fetched on demand rather than resent every turn, which is what makes coverage here
+    # free where a sixth tool would not be.
     register_resources(server, catalog, run_view)
+    register_prompts(server)
+    register_completions(server, catalog)
     log.info("mcp-aws %s ready: 5 tools, %d catalog views", __version__, len(catalog))
     return server
 

@@ -33,6 +33,16 @@ def list_profile_names() -> list[str]:
     return sorted(name for name in names if SETTINGS.profile_allowed(name))
 
 
+def cached_identity(profile: str) -> dict[str, Any] | None:
+    """The identity already resolved for this profile, or None.
+
+    Never calls AWS. Vocabulary listings are read whenever a client opens the server, so
+    they label a profile from whatever is already known and leave resolution to a read of
+    the profile itself.
+    """
+    return _identity_cache.get(profile)
+
+
 def _alias_for(profile: str) -> str | None:
     try:
         aliases = client_for(profile, "iam").list_account_aliases().get("AccountAliases", [])

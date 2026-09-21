@@ -73,6 +73,11 @@ surface would consume the model's budget before it asks anything. `tests/test_su
 asserts both the tool count and the serialized schema size — if it fails, the design has
 regressed.
 
+Resources, resource templates, prompts and completions are *outside* that budget — they
+are fetched on demand, not resent — so that is where anything the tool surface cannot
+afford belongs. New capability for a gateway is a listing/template pair in `resources.py`,
+never a sixth tool.
+
 ## Build & Test
 
 ```bash
@@ -93,7 +98,12 @@ Never add a test that needs credentials or network. Use the `stub_client` fixtur
 | `catalog/loader.py` | Discovery + validation; where read-only is enforced |
 | `catalog/engine.py` | The only module that executes AWS calls for a query |
 | `catalog/views/*.yaml` | The catalog itself |
+| `resources.py` | Listing/template pairs; the gateway pairing rule lives in its docstring |
+| `vocabulary.py` | The values a picker and a completion both read from |
+| `completions.py` | `completion/complete` over those same vocabularies |
+| `prompts.py` | Two prompts whose argument names are the vocabulary's variables |
 | `aws/profiles.py` | Named profiles → accounts |
+| `aws/regions.py` | Regions from bundled endpoint data — offline on purpose |
 | `budget.py` | Size caps and lossless pagination cursors |
 
 ## Conventions & Patterns
@@ -109,5 +119,17 @@ Never add a test that needs credentials or network. Use the `stub_client` fixtur
   resume mid-page. `engine._next_page_token` uses botocore internals deliberately —
   `PageIterator.resume_token` is only populated on botocore's own MaxItems truncation,
   and its MaxItems counts result-key entries, not projected items.
+- **A listing is free to read.** A gateway reads every listing resource whenever someone
+  opens the server, so `vocabulary.py` may only use local config, bundled endpoint data
+  and the in-memory catalog. Live calls belong behind a member URI. `test_resources.py`
+  fails loudly if a listing ever creates an AWS client.
+- **Resource handlers raise; tool wrappers return.** A resource handler raises
+  `ResourceNotFoundError`/`ResourceError` from `mcp.server.mcpserver.exceptions` — an
+  `McpAwsError` escaping one is treated by the SDK as a crash and its message is withheld
+  from the client. `_guarded` keeps doing the opposite for tools, which report an error as
+  content.
+- **URIs pair by prefix.** A template's fixed prefix, up to its first `{`, must be its
+  listing's URI, or the picker silently goes empty. `test_resources.py` implements the
+  rule rather than listing the URIs, so a rename fails there.
 - **Tool wrappers keep their signatures.** `_guarded` uses `functools.wraps` because the
   input schema is derived from the signature; losing it publishes `(*args, **kwargs)`.
